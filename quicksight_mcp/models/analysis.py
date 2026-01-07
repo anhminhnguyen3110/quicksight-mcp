@@ -62,7 +62,7 @@ class CreateAnalysisRequest:
             params['SourceEntity'] = self.source_entity
         if self.permissions:
             params['Permissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.permissions
             ]
         if self.theme_arn:
@@ -116,12 +116,12 @@ class UpdateAnalysisPermissionsRequest:
         
         if self.grant_permissions:
             params['GrantPermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.grant_permissions
             ]
         if self.revoke_permissions:
             params['RevokePermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.revoke_permissions
             ]
         

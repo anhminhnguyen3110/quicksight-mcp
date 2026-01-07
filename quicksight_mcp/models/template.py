@@ -64,7 +64,7 @@ class CreateTemplateRequest:
         if self.name:
             params['Name'] = self.name
         if self.source_entity:
-            params['SourceEntity'] = self.source_entity.to_dict()
+            params['SourceEntity'] = self.source_entity if isinstance(self.source_entity, dict) else self.source_entity.to_dict()
         if self.definition:
             params['Definition'] = self.definition
         if self.permissions:
@@ -94,7 +94,7 @@ class UpdateTemplateRequest:
         }
         
         if self.source_entity:
-            params['SourceEntity'] = self.source_entity.to_dict()
+            params['SourceEntity'] = self.source_entity if isinstance(self.source_entity, dict) else self.source_entity.to_dict()
         if self.definition:
             params['Definition'] = self.definition
         if self.name:

@@ -111,7 +111,19 @@ def register_dataset_tools(mcp):
             if permissions:
                 params['Permissions'] = permissions
             
-            response = quicksight.create_data_set(**params)
+            service = DatasetService(quicksight, config.aws_account_id)
+            response = service.create_dataset(
+                dataset_id=data_set_id,
+                name=name,
+                physical_table_map=physical_table_map,
+                import_mode=import_mode,
+                logical_table_map=logical_table_map,
+                column_groups=column_groups,
+                field_folders=field_folders,
+                row_level_permission_data_set=row_level_permission_data_set,
+                column_level_permission_rules=column_level_permission_rules,
+                permissions=permissions
+            )
             
             logger.info(f"Created dataset: {data_set_id}")
             
@@ -191,7 +203,18 @@ def register_dataset_tools(mcp):
             if column_level_permission_rules:
                 params['ColumnLevelPermissionRules'] = column_level_permission_rules
             
-            response = quicksight.update_data_set(**params)
+            service = DatasetService(quicksight, config.aws_account_id)
+            response = service.update_dataset(
+                dataset_id=data_set_id,
+                name=name,
+                physical_table_map=physical_table_map,
+                import_mode=import_mode,
+                logical_table_map=logical_table_map,
+                column_groups=column_groups,
+                field_folders=field_folders,
+                row_level_permission_data_set=row_level_permission_data_set,
+                column_level_permission_rules=column_level_permission_rules
+            )
             
             logger.info(f"Updated dataset: {data_set_id}")
             
@@ -236,18 +259,12 @@ def register_dataset_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'DataSetId': data_set_id
-            }
-            
-            if grant_permissions:
-                params['GrantPermissions'] = grant_permissions
-            
-            if revoke_permissions:
-                params['RevokePermissions'] = revoke_permissions
-            
-            response = quicksight.update_data_set_permissions(**params)
+            service = DatasetService(quicksight, config.aws_account_id)
+            response = service.update_permissions(
+                dataset_id=data_set_id,
+                grant_permissions=grant_permissions,
+                revoke_permissions=revoke_permissions
+            )
             
             logger.info(f"Updated permissions for dataset: {data_set_id}")
             

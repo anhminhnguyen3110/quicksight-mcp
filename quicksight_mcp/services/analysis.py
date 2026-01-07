@@ -58,6 +58,23 @@ class AnalysisService:
             logger.error(f"Error describing analysis {analysis_id}: {str(e)}")
             raise
     
+    def describe_analysis_definition(
+        self,
+        analysis_id: str
+    ) -> Dict[str, Any]:
+        """Get the definition of an analysis"""
+        try:
+            response = self.client.describe_analysis_definition(
+                AwsAccountId=self.account_id,
+                AnalysisId=analysis_id
+            )
+            logger.info(f"Retrieved analysis definition for {analysis_id}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error describing analysis definition {analysis_id}: {str(e)}")
+            raise
+    
     def create_analysis(
         self,
         analysis_id: str,

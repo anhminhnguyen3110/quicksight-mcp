@@ -60,18 +60,22 @@ class CreateDashboardRequest:
         params = {
             'AwsAccountId': account_id,
             'DashboardId': self.dashboard_id,
-            'Name': self.name,
-            'SourceEntity': {}
+            'Name': self.name
         }
         
-        if self.source_entity.source_analysis:
-            params['SourceEntity']['SourceAnalysis'] = self.source_entity.source_analysis
-        if self.source_entity.source_template:
-            params['SourceEntity']['SourceTemplate'] = self.source_entity.source_template
+        # Handle source_entity as dict or DashboardSourceEntity
+        if isinstance(self.source_entity, dict):
+            params['SourceEntity'] = self.source_entity
+        else:
+            params['SourceEntity'] = {}
+            if self.source_entity.source_analysis:
+                params['SourceEntity']['SourceAnalysis'] = self.source_entity.source_analysis
+            if self.source_entity.source_template:
+                params['SourceEntity']['SourceTemplate'] = self.source_entity.source_template
         
         if self.permissions:
             params['Permissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.permissions
             ]
         if self.version_description:
@@ -101,14 +105,18 @@ class UpdateDashboardRequest:
         params = {
             'AwsAccountId': account_id,
             'DashboardId': self.dashboard_id,
-            'Name': self.name,
-            'SourceEntity': {}
+            'Name': self.name
         }
         
-        if self.source_entity.source_analysis:
-            params['SourceEntity']['SourceAnalysis'] = self.source_entity.source_analysis
-        if self.source_entity.source_template:
-            params['SourceEntity']['SourceTemplate'] = self.source_entity.source_template
+        # Handle source_entity as dict or DashboardSourceEntity
+        if isinstance(self.source_entity, dict):
+            params['SourceEntity'] = self.source_entity
+        else:
+            params['SourceEntity'] = {}
+            if self.source_entity.source_analysis:
+                params['SourceEntity']['SourceAnalysis'] = self.source_entity.source_analysis
+            if self.source_entity.source_template:
+                params['SourceEntity']['SourceTemplate'] = self.source_entity.source_template
         
         if self.version_description:
             params['VersionDescription'] = self.version_description
@@ -138,22 +146,22 @@ class UpdateDashboardPermissionsRequest:
         
         if self.grant_permissions:
             params['GrantPermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.grant_permissions
             ]
         if self.revoke_permissions:
             params['RevokePermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.revoke_permissions
             ]
         if self.grant_link_permissions:
             params['GrantLinkPermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.grant_link_permissions
             ]
         if self.revoke_link_permissions:
             params['RevokeLinkPermissions'] = [
-                {'Principal': p.principal, 'Actions': p.actions}
+                p if isinstance(p, dict) else {'Principal': p.principal, 'Actions': p.actions}
                 for p in self.revoke_link_permissions
             ]
         

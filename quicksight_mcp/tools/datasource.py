@@ -82,27 +82,17 @@ def register_datasource_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'DataSourceId': data_source_id,
-                'Name': name,
-                'Type': type,
-                'DataSourceParameters': data_source_parameters
-            }
-            
-            if credentials:
-                params['Credentials'] = credentials
-            
-            if vpc_connection_properties:
-                params['VpcConnectionProperties'] = vpc_connection_properties
-            
-            if ssl_properties:
-                params['SslProperties'] = ssl_properties
-            
-            if permissions:
-                params['Permissions'] = permissions
-            
-            response = quicksight.create_data_source(**params)
+            service = DatasourceService(quicksight, config.aws_account_id)
+            response = service.create_datasource(
+                datasource_id=data_source_id,
+                name=name,
+                type=type,
+                data_source_parameters=data_source_parameters,
+                credentials=credentials,
+                vpc_connection_properties=vpc_connection_properties,
+                ssl_properties=ssl_properties,
+                permissions=permissions
+            )
             
             logger.info(f"Created data source: {data_source_id}")
             
@@ -152,25 +142,15 @@ def register_datasource_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'DataSourceId': data_source_id,
-                'Name': name
-            }
-            
-            if data_source_parameters:
-                params['DataSourceParameters'] = data_source_parameters
-            
-            if credentials:
-                params['Credentials'] = credentials
-            
-            if vpc_connection_properties:
-                params['VpcConnectionProperties'] = vpc_connection_properties
-            
-            if ssl_properties:
-                params['SslProperties'] = ssl_properties
-            
-            response = quicksight.update_data_source(**params)
+            service = DatasourceService(quicksight, config.aws_account_id)
+            response = service.update_datasource(
+                datasource_id=data_source_id,
+                name=name,
+                data_source_parameters=data_source_parameters,
+                credentials=credentials,
+                vpc_connection_properties=vpc_connection_properties,
+                ssl_properties=ssl_properties
+            )
             
             logger.info(f"Updated data source: {data_source_id}")
             
@@ -214,18 +194,12 @@ def register_datasource_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'DataSourceId': data_source_id
-            }
-            
-            if grant_permissions:
-                params['GrantPermissions'] = grant_permissions
-            
-            if revoke_permissions:
-                params['RevokePermissions'] = revoke_permissions
-            
-            response = quicksight.update_data_source_permissions(**params)
+            service = DatasourceService(quicksight, config.aws_account_id)
+            response = service.update_permissions(
+                datasource_id=data_source_id,
+                grant_permissions=grant_permissions,
+                revoke_permissions=revoke_permissions
+            )
             
             logger.info(f"Updated permissions for data source: {data_source_id}")
             

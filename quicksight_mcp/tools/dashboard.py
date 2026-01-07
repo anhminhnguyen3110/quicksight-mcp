@@ -62,10 +62,8 @@ def register_dashboard_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            response = quicksight.describe_dashboard_definition(
-                AwsAccountId=config.aws_account_id,
-                DashboardId=dashboard_id
-            )
+            service = DashboardService(quicksight, config.aws_account_id)
+            response = service.describe_dashboard_definition(dashboard_id=dashboard_id)
             
             logger.info(f"Retrieved dashboard definition for {dashboard_id}")
             
@@ -99,30 +97,14 @@ def register_dashboard_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            versions = []
-            next_token = None
-            
-            while True:
-                params = {
-                    'AwsAccountId': config.aws_account_id,
-                    'DashboardId': dashboard_id
-                }
-                if next_token:
-                    params['NextToken'] = next_token
-                
-                response = quicksight.list_dashboard_versions(**params)
-                versions.extend(response.get('DashboardVersionSummaryList', []))
-                
-                next_token = response.get('NextToken')
-                if not next_token:
-                    break
+            service = DashboardService(quicksight, config.aws_account_id)
+            versions = service.list_dashboard_versions(dashboard_id=dashboard_id)
             
             logger.info(f"Found {len(versions)} versions for dashboard {dashboard_id}")
             
             return {
-                'Status': response['Status'],
-                'DashboardVersions': versions,
-                'RequestId': response['ResponseMetadata']['RequestId']
+                'Status': 200,
+                'DashboardVersions': versions
             }
             
         except Exception as e:
@@ -188,7 +170,17 @@ def register_dashboard_tools(mcp):
             if tags:
                 params['Tags'] = tags
             
-            response = quicksight.create_dashboard(**params)
+            service = DashboardService(quicksight, config.aws_account_id)
+            response = service.create_dashboard(
+                dashboard_id=dashboard_id,
+                name=name,
+                source_entity=source_entity,
+                permissions=permissions,
+                version_description=version_description,
+                dashboard_publish_options=dashboard_publish_options,
+                theme_arn=theme_arn,
+                tags=tags
+            )
             
             logger.info(f"Created dashboard: {dashboard_id}")
             
@@ -255,7 +247,15 @@ def register_dashboard_tools(mcp):
             if theme_arn:
                 params['ThemeArn'] = theme_arn
             
-            response = quicksight.update_dashboard(**params)
+            service = DashboardService(quicksight, config.aws_account_id)
+            response = service.update_dashboard(
+                dashboard_id=dashboard_id,
+                name=name,
+                source_entity=source_entity,
+                version_description=version_description,
+                dashboard_publish_options=dashboard_publish_options,
+                theme_arn=theme_arn
+            )
             
             logger.info(f"Updated dashboard: {dashboard_id}")
             
@@ -298,10 +298,10 @@ def register_dashboard_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            response = quicksight.update_dashboard_published_version(
-                AwsAccountId=config.aws_account_id,
-                DashboardId=dashboard_id,
-                VersionNumber=version_number
+            service = DashboardService(quicksight, config.aws_account_id)
+            response = service.update_dashboard_published_version(
+                dashboard_id=dashboard_id,
+                version_number=version_number
             )
             
             logger.info(f"Published dashboard {dashboard_id} version {version_number}")
@@ -349,24 +349,14 @@ def register_dashboard_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'DashboardId': dashboard_id
-            }
-            
-            if grant_permissions:
-                params['GrantPermissions'] = grant_permissions
-            
-            if revoke_permissions:
-                params['RevokePermissions'] = revoke_permissions
-            
-            if grant_link_permissions:
-                params['GrantLinkPermissions'] = grant_link_permissions
-            
-            if revoke_link_permissions:
-                params['RevokeLinkPermissions'] = revoke_link_permissions
-            
-            response = quicksight.update_dashboard_permissions(**params)
+            service = DashboardService(quicksight, config.aws_account_id)
+            response = service.update_permissions(
+                dashboard_id=dashboard_id,
+                grant_permissions=grant_permissions,
+                revoke_permissions=revoke_permissions,
+                grant_link_permissions=grant_link_permissions,
+                revoke_link_permissions=revoke_link_permissions
+            )
             
             logger.info(f"Updated permissions for dashboard: {dashboard_id}")
             

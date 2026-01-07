@@ -145,6 +145,79 @@ class DashboardService:
             logger.error(f"Error publishing dashboard {dashboard_id}: {str(e)}")
             raise
     
+    def describe_dashboard_definition(
+        self,
+        dashboard_id: str,
+        version_number: Optional[int] = None,
+        alias_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get the definition of a dashboard"""
+        try:
+            params = {
+                'AwsAccountId': self.account_id,
+                'DashboardId': dashboard_id
+            }
+            
+            if version_number:
+                params['VersionNumber'] = version_number
+            if alias_name:
+                params['AliasName'] = alias_name
+            
+            response = self.client.describe_dashboard_definition(**params)
+            logger.info(f"Retrieved dashboard definition for {dashboard_id}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error describing dashboard definition {dashboard_id}: {str(e)}")
+            raise
+    
+    def list_dashboard_versions(self, dashboard_id: str) -> List[Dict[str, Any]]:
+        """List all versions of a dashboard"""
+        try:
+            versions = []
+            next_token = None
+            
+            while True:
+                params = {
+                    'AwsAccountId': self.account_id,
+                    'DashboardId': dashboard_id
+                }
+                if next_token:
+                    params['NextToken'] = next_token
+                    
+                response = self.client.list_dashboard_versions(**params)
+                versions.extend(response.get('DashboardVersionSummaryList', []))
+                
+                next_token = response.get('NextToken')
+                if not next_token:
+                    break
+                    
+            logger.info(f"Found {len(versions)} versions for dashboard {dashboard_id}")
+            return versions
+            
+        except Exception as e:
+            logger.error(f"Error listing dashboard versions {dashboard_id}: {str(e)}")
+            raise
+    
+    def update_dashboard_published_version(
+        self,
+        dashboard_id: str,
+        version_number: int
+    ) -> Dict[str, Any]:
+        """Update the published version of a dashboard"""
+        try:
+            response = self.client.update_dashboard_published_version(
+                AwsAccountId=self.account_id,
+                DashboardId=dashboard_id,
+                VersionNumber=version_number
+            )
+            logger.info(f"Published dashboard {dashboard_id} version {version_number}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error publishing dashboard {dashboard_id}: {str(e)}")
+            raise
+    
     def update_permissions(
         self,
         dashboard_id: str,

@@ -10,7 +10,7 @@ from quicksight_mcp.models.ingestion import (
     RefreshInterval, IngestionType
 )
 from quicksight_mcp.models.analysis import CreateAnalysisRequest, UpdateAnalysisRequest
-from quicksight_mcp.models.dashboard import CreateDashboardRequest, UpdateDashboardRequest, SourceEntity
+from quicksight_mcp.models.dashboard import CreateDashboardRequest, UpdateDashboardRequest
 from quicksight_mcp.models.dataset import CreateDatasetRequest, UpdateDatasetRequest, ImportMode
 from quicksight_mcp.models.template import CreateTemplateRequest, UpdateTemplateRequest, TemplateSourceEntity
 from quicksight_mcp.models.theme import CreateThemeRequest, UpdateThemeRequest
@@ -157,7 +157,7 @@ def test_update_analysis_with_theme():
 
 def test_create_dashboard_with_publish_options():
     """Test CreateDashboardRequest with publish options"""
-    source = SourceEntity(source_template_arn='arn:template', dataset_references=[])
+    source = {'SourceTemplate': {'Arn': 'arn:template', 'DataSetReferences': []}}
     request = CreateDashboardRequest(
         dashboard_id="d1",
         name="Dashboard",
@@ -174,7 +174,7 @@ def test_create_dashboard_with_publish_options():
 
 def test_update_dashboard_with_all_params():
     """Test UpdateDashboardRequest with all parameters"""
-    source = SourceEntity(source_template_arn='arn:template', dataset_references=[])
+    source = {'SourceTemplate': {'Arn': 'arn:template', 'DataSetReferences': []}}
     request = UpdateDashboardRequest(
         dashboard_id="d1",
         name="Updated",
@@ -262,7 +262,7 @@ def test_update_dataset_with_column_groups():
 
 def test_create_template_with_permissions():
     """Test CreateTemplateRequest with permissions"""
-    source = TemplateSourceEntity(source_analysis_arn='arn:analysis', dataset_references=[])
+    source = {'SourceAnalysis': {'Arn': 'arn:analysis', 'DataSetReferences': []}}
     request = CreateTemplateRequest(
         template_id="t1",
         name="Template",
@@ -279,7 +279,7 @@ def test_create_template_with_permissions():
 
 def test_update_template_with_version_description():
     """Test UpdateTemplateRequest with version description"""
-    source = TemplateSourceEntity(source_analysis_arn='arn:analysis', dataset_references=[])
+    source = {'SourceAnalysis': {'Arn': 'arn:analysis', 'DataSetReferences': []}}
     request = UpdateTemplateRequest(
         template_id="t1",
         source_entity=source,

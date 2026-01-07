@@ -62,10 +62,8 @@ def register_analysis_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            response = quicksight.describe_analysis_definition(
-                AwsAccountId=config.aws_account_id,
-                AnalysisId=analysis_id
-            )
+            service = AnalysisService(quicksight, config.aws_account_id)
+            response = service.describe_analysis_definition(analysis_id=analysis_id)
             
             logger.info(f"Retrieved analysis definition for {analysis_id}")
             
@@ -137,7 +135,16 @@ def register_analysis_tools(mcp):
             if tags:
                 params['Tags'] = tags
             
-            response = quicksight.create_analysis(**params)
+            service = AnalysisService(quicksight, config.aws_account_id)
+            response = service.create_analysis(
+                analysis_id=analysis_id,
+                name=name,
+                definition=definition,
+                source_entity=source_entity,
+                permissions=permissions,
+                theme_arn=theme_arn,
+                tags=tags
+            )
             
             logger.info(f"Created analysis: {analysis_id}")
             
@@ -200,7 +207,14 @@ def register_analysis_tools(mcp):
             if theme_arn:
                 params['ThemeArn'] = theme_arn
             
-            response = quicksight.update_analysis(**params)
+            service = AnalysisService(quicksight, config.aws_account_id)
+            response = service.update_analysis(
+                analysis_id=analysis_id,
+                name=name,
+                definition=definition,
+                source_entity=source_entity,
+                theme_arn=theme_arn
+            )
             
             logger.info(f"Updated analysis: {analysis_id}")
             
@@ -244,18 +258,12 @@ def register_analysis_tools(mcp):
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'AnalysisId': analysis_id
-            }
-            
-            if grant_permissions:
-                params['GrantPermissions'] = grant_permissions
-            
-            if revoke_permissions:
-                params['RevokePermissions'] = revoke_permissions
-            
-            response = quicksight.update_analysis_permissions(**params)
+            service = AnalysisService(quicksight, config.aws_account_id)
+            response = service.update_permissions(
+                analysis_id=analysis_id,
+                grant_permissions=grant_permissions,
+                revoke_permissions=revoke_permissions
+            )
             
             logger.info(f"Updated permissions for analysis: {analysis_id}")
             
