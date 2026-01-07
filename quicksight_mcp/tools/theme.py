@@ -3,6 +3,13 @@
 import logging
 from typing import Dict, Any, Optional, List
 from quicksight_mcp.services.theme import ThemeService
+from quicksight_mcp.models.tool_models import (
+    ListThemesRequest, ListThemesResponse,
+    DescribeThemeRequest, DescribeThemeResponse,
+    CreateThemeRequest as ThemeToolRequest, CreateThemeResponse as ThemeToolResponse,
+    UpdateThemeRequest as ThemeToolUpdateRequest, UpdateThemeResponse as ThemeToolUpdateResponse,
+    PaginationInfo, ErrorInfo
+)
 from quicksight_mcp.models.theme import (
     CreateThemeRequest,
     UpdateThemeRequest,
@@ -19,143 +26,198 @@ def register_theme_tools(mcp):
         name="list_themes",
         description="List all themes in the QuickSight account"
     )
-    async def list_themes() -> Dict[str, str]:
+    async def list_themes(request: ListThemesRequest) -> ListThemesResponse:
         """List all themes with their IDs and names"""
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = ThemeService(quicksight, config.aws_account_id)
-        themes = service.list_themes()
-        
-        result = {}
-        for theme in themes:
-            theme_id = theme['ThemeId']
-            theme_name = theme.get('Name', theme_id)
-            result[theme_id] = theme_name
-        
-        return result
+        try:
+            service = ThemeService(quicksight, config.aws_account_id)
+            all_themes = service.list_themes()
+            
+            # Apply pagination
+            limit = 10
+            start_idx = request.offset
+            end_idx = start_idx + limit
+            paginated = all_themes[start_idx:end_idx]
+            
+            # Format themes
+            formatted_themes = [
+                {'ThemeId': t['ThemeId'], 'Name': t.get('Name', t['ThemeId'])}
+                for t in paginated
+            ]
+            
+            return ListThemesResponse(
+                themes=formatted_themes,
+                pagination=PaginationInfo(
+                    limit=10,
+                    offset=request.offset,
+                    total=len(all_themes),
+                    has_more=end_idx < len(all_themes),
+                    next_offset=end_idx if end_idx < len(all_themes) else None
+                ),
+                status="SUCCESS"
+            )
+        except Exception as e:
+            logger.error(f"Error listing themes: {str(e)}")
+            return ListThemesResponse(
+                themes=[],
+                pagination=PaginationInfo(limit=10, offset=request.offset, total=0, has_more=False),
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_theme",
         description="Get detailed information about a specific theme"
     )
-    async def describe_theme(
-        theme_id: str,
-        version_number: Optional[int] = None,
-        alias_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def describe_theme(request: DescribeThemeRequest) -> DescribeThemeResponse:
         """
         Get theme details including colors and typography
         
         Args:
-            theme_id: The ID of the theme to describe
-            version_number: Specific version number (optional)
-            alias_name: Alias name (optional)
+            request: Request with theme_id, version_number, and alias_name
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = ThemeService(quicksight, config.aws_account_id)
-        return service.describe_theme(theme_id, version_number, alias_name)
+        try:
+            service = ThemeService(quicksight, config.aws_account_id)
+            theme = service.describe_theme(
+                request.theme_id,
+                request.version_number,
+                request.alias_name
+            )
+            return DescribeThemeResponse(
+                theme=theme,
+                status="SUCCESS"
+            )
+        except Exception as e:
+            logger.error(f"Error describing theme {request.theme_id}: {str(e)}")
+            return DescribeThemeResponse(
+                theme={},
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="create_theme",
         description="Create a new QuickSight theme"
     )
-    async def create_theme(
-        theme_id: str,
-        name: str,
-        base_theme_id: str,
-        configuration: Dict[str, Any],
-        permissions: Optional[List[Dict]] = None,
-        version_description: Optional[str] = None,
-        tags: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    async def create_theme(request: ThemeToolRequest) -> ThemeToolResponse:
         """
         Create a new custom theme
         
         Args:
-            theme_id: Unique identifier for the theme
-            name: Display name for the theme
-            base_theme_id: Base theme to inherit from
-            configuration: Theme configuration (colors, typography, UI)
-            permissions: Optional permissions to grant
-            version_description: Description for version 1
-            tags: Optional tags
+            request: ThemeToolRequest with all theme configuration
             
         Returns:
-            Dict with creation status and theme ARN
+            ThemeToolResponse with creation status and theme ARN
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = ThemeService(quicksight, config.aws_account_id)
-        
-        # Convert configuration dict to model if it's a dict
-        config_model = ThemeConfiguration(
-            data_color_palette=configuration.get('DataColorPalette'),
-            ui_color_palette=configuration.get('UIColorPalette'),
-            sheet=configuration.get('Sheet'),
-            typography=configuration.get('Typography')
-        ) if isinstance(configuration, dict) else configuration
-        
-        request = CreateThemeRequest(
-            theme_id=theme_id,
-            name=name,
-            base_theme_id=base_theme_id,
-            configuration=config_model,
-            permissions=permissions,
-            version_description=version_description,
-            tags=tags
-        )
-        
-        return service.create_theme(request)
+        try:
+            service = ThemeService(quicksight, config.aws_account_id)
+            
+            # Convert configuration dict to model if it's a dict
+            config_model = ThemeConfiguration(
+                data_color_palette=request.configuration.get('DataColorPalette') if isinstance(request.configuration, dict) else None,
+                ui_color_palette=request.configuration.get('UIColorPalette') if isinstance(request.configuration, dict) else None,
+                sheet=request.configuration.get('Sheet') if isinstance(request.configuration, dict) else None,
+                typography=request.configuration.get('Typography') if isinstance(request.configuration, dict) else None
+            ) if isinstance(request.configuration, dict) else request.configuration
+            
+            theme_request = CreateThemeRequest(
+                theme_id=request.theme_id,
+                name=request.name,
+                base_theme_id=request.base_theme_id,
+                configuration=config_model,
+                permissions=request.permissions,
+                version_description=request.version_description,
+                tags=request.tags
+            )
+            
+            response = service.create_theme(theme_request)
+            
+            logger.info(f"Created theme: {request.theme_id}")
+            
+            return ThemeToolResponse(
+                arn=response.get('Arn', ''),
+                theme_id=response.get('ThemeId', request.theme_id),
+                version_arn=response.get('VersionArn', ''),
+                creation_status=response.get('CreationStatus', 'CREATION_IN_PROGRESS'),
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating theme {request.theme_id}: {str(e)}")
+            return ThemeToolResponse(
+                arn="",
+                theme_id=request.theme_id,
+                version_arn="",
+                creation_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="update_theme",
         description="Update an existing QuickSight theme"
     )
-    async def update_theme(
-        theme_id: str,
-        base_theme_id: str,
-        configuration: Optional[Dict[str, Any]] = None,
-        name: Optional[str] = None,
-        version_description: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def update_theme(request: ThemeToolUpdateRequest) -> ThemeToolUpdateResponse:
         """
         Update an existing theme (creates new version)
         
         Args:
-            theme_id: ID of the theme to update
-            base_theme_id: Base theme to inherit from
-            configuration: New theme configuration
-            name: Optional new name
-            version_description: Description for new version
+            request: ThemeToolUpdateRequest with updated configuration
             
         Returns:
-            Dict with update status and version number
+            ThemeToolUpdateResponse with update status and version number
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = ThemeService(quicksight, config.aws_account_id)
-        
-        # Convert configuration dict to model if provided
-        config_model = None
-        if configuration:
-            config_model = ThemeConfiguration(
-                data_color_palette=configuration.get('DataColorPalette'),
-                ui_color_palette=configuration.get('UIColorPalette'),
-                sheet=configuration.get('Sheet'),
-                typography=configuration.get('Typography')
-            ) if isinstance(configuration, dict) else configuration
-        
-        request = UpdateThemeRequest(
-            theme_id=theme_id,
-            base_theme_id=base_theme_id,
-            configuration=config_model,
-            name=name,
-            version_description=version_description
-        )
-        
-        return service.update_theme(request)
+        try:
+            service = ThemeService(quicksight, config.aws_account_id)
+            
+            # Convert configuration dict to model if provided
+            config_model = None
+            if request.configuration:
+                config_model = ThemeConfiguration(
+                    data_color_palette=request.configuration.get('DataColorPalette') if isinstance(request.configuration, dict) else None,
+                    ui_color_palette=request.configuration.get('UIColorPalette') if isinstance(request.configuration, dict) else None,
+                    sheet=request.configuration.get('Sheet') if isinstance(request.configuration, dict) else None,
+                    typography=request.configuration.get('Typography') if isinstance(request.configuration, dict) else None
+                ) if isinstance(request.configuration, dict) else request.configuration
+            
+            theme_request = UpdateThemeRequest(
+                theme_id=request.theme_id,
+                base_theme_id=request.base_theme_id,
+                configuration=config_model,
+                name=request.name,
+                version_description=request.version_description
+            )
+            
+            response = service.update_theme(theme_request)
+            
+            logger.info(f"Updated theme: {request.theme_id}")
+            
+            return ThemeToolUpdateResponse(
+                arn=response.get('Arn', ''),
+                theme_id=response.get('ThemeId', request.theme_id),
+                version_arn=response.get('VersionArn', ''),
+                update_status=response.get('UpdateStatus', 'UPDATE_IN_PROGRESS'),
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error updating theme {request.theme_id}: {str(e)}")
+            return ThemeToolUpdateResponse(
+                arn="",
+                theme_id=request.theme_id,
+                version_arn="",
+                update_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )

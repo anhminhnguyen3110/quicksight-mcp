@@ -1,11 +1,18 @@
 """Template management tools for QuickSight"""
 
 import logging
-from typing import Dict, Any, Optional, List
 from quicksight_mcp.services.template import TemplateService
+from quicksight_mcp.models.tool_models import (
+    ListTemplatesRequest, ListTemplatesResponse,
+    DescribeTemplateRequest, DescribeTemplateResponse,
+    DescribeTemplateDefinitionRequest, DescribeTemplateDefinitionResponse,
+    CreateTemplateRequest, CreateTemplateResponse,
+    UpdateTemplateRequest, UpdateTemplateResponse,
+    PaginationInfo, ErrorInfo
+)
 from quicksight_mcp.models.template import (
-    CreateTemplateRequest,
-    UpdateTemplateRequest,
+    CreateTemplateRequest as TemplateCreateRequest,
+    UpdateTemplateRequest as TemplateUpdateRequest,
     TemplateSourceEntity
 )
 
@@ -19,61 +26,90 @@ def register_template_tools(mcp):
         name="list_templates",
         description="List all templates in the QuickSight account"
     )
-    async def list_templates() -> Dict[str, str]:
+    async def list_templates(request: ListTemplatesRequest) -> ListTemplatesResponse:
         """List all templates with their IDs and names"""
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = TemplateService(quicksight, config.aws_account_id)
-        templates = service.list_templates()
-        
-        result = {}
-        for template in templates:
-            template_id = template['TemplateId']
-            template_name = template.get('Name', template_id)
-            result[template_id] = template_name
-        
-        return result
+        try:
+            service = TemplateService(quicksight, config.aws_account_id)
+            all_templates = service.list_templates()
+            
+            # Apply pagination
+            limit = 10
+            start_idx = request.offset
+            end_idx = start_idx + limit
+            paginated = all_templates[start_idx:end_idx]
+            
+            # Format templates
+            formatted_templates = [
+                {'TemplateId': t['TemplateId'], 'Name': t.get('Name', t['TemplateId'])}
+                for t in paginated
+            ]
+            
+            return ListTemplatesResponse(
+                templates=formatted_templates,
+                pagination=PaginationInfo(
+                    limit=10,
+                    offset=request.offset,
+                    total=len(all_templates),
+                    has_more=end_idx < len(all_templates),
+                    next_offset=end_idx if end_idx < len(all_templates) else None
+                ),
+                status="SUCCESS"
+            )
+        except Exception as e:
+            logger.error(f"Error listing templates: {str(e)}")
+            return ListTemplatesResponse(
+                templates=[],
+                pagination=PaginationInfo(limit=10, offset=request.offset, total=0, has_more=False),
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_template",
         description="Get detailed information about a specific template"
     )
-    async def describe_template(
-        template_id: str,
-        version_number: Optional[int] = None,
-        alias_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def describe_template(request: DescribeTemplateRequest) -> DescribeTemplateResponse:
         """
         Get template details
         
         Args:
-            template_id: The ID of the template to describe
-            version_number: Specific version number (optional)
-            alias_name: Alias name (optional)
+            request: Request with template_id, version_number, and alias_name
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = TemplateService(quicksight, config.aws_account_id)
-        return service.describe_template(template_id, version_number, alias_name)
+        try:
+            service = TemplateService(quicksight, config.aws_account_id)
+            template = service.describe_template(
+                request.template_id,
+                request.version_number,
+                request.alias_name
+            )
+            return DescribeTemplateResponse(
+                template=template,
+                status="SUCCESS"
+            )
+        except Exception as e:
+            logger.error(f"Error describing template {request.template_id}: {str(e)}")
+            return DescribeTemplateResponse(
+                template={},
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_template_definition",
         description="Get the definition (structure) of a template"
     )
-    async def describe_template_definition(
-        template_id: str,
-        version_number: Optional[int] = None,
-        alias_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def describe_template_definition(request: DescribeTemplateDefinitionRequest) -> DescribeTemplateDefinitionResponse:
         """
         Get template definition with full structure
         
         Args:
-            template_id: The ID of the template
-            version_number: Specific version number (optional)
-            alias_name: Alias name (optional)
+            request: Request with template_id, version_number, and alias_name
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -81,124 +117,146 @@ def register_template_tools(mcp):
         try:
             service = TemplateService(quicksight, config.aws_account_id)
             response = service.describe_template_definition(
-                template_id=template_id,
-                version_number=version_number,
-                alias_name=alias_name
+                template_id=request.template_id,
+                version_number=request.version_number,
+                alias_name=request.alias_name
             )
             
-            logger.info(f"Retrieved template definition for {template_id}")
+            logger.info(f"Retrieved template definition for {request.template_id}")
             
-            return {
-                'Status': response['Status'],
-                'TemplateId': response.get('TemplateId'),
-                'Definition': response.get('Definition'),
-                'Errors': response.get('Errors', []),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return DescribeTemplateDefinitionResponse(
+                template_id=response.get('TemplateId', request.template_id),
+                definition=response.get('Definition', {}),
+                errors=response.get('Errors', []),
+                status="SUCCESS"
+            )
             
         except Exception as e:
             logger.error(f"Error describing template definition: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e)
-            }
+            return DescribeTemplateDefinitionResponse(
+                template_id=request.template_id,
+                definition={},
+                errors=[],
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="create_template",
         description="Create a new QuickSight template"
     )
-    async def create_template(
-        template_id: str,
-        name: Optional[str] = None,
-        source_entity: Optional[Dict[str, Any]] = None,
-        definition: Optional[Dict[str, Any]] = None,
-        permissions: Optional[List[Dict]] = None,
-        version_description: Optional[str] = None,
-        tags: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    async def create_template(request: CreateTemplateRequest) -> CreateTemplateResponse:
         """
         Create a new template from analysis or existing template
         
         Args:
-            template_id: Unique identifier for the template
-            name: Display name for the template (optional)
-            source_entity: Source (analysis or template) to create from
-            definition: Direct definition instead of source entity
-            permissions: Optional permissions to grant
-            version_description: Description for version 1
-            tags: Optional tags
+            request: CreateTemplateRequest with all template configuration
             
         Returns:
-            Dict with creation status and template ARN
+            CreateTemplateResponse with creation status and template ARN
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = TemplateService(quicksight, config.aws_account_id)
-        
-        # Convert source_entity dict to model if provided
-        source_entity_model = None
-        if source_entity:
-            source_entity_model = TemplateSourceEntity(
-                source_analysis=source_entity.get('SourceAnalysis'),
-                source_template=source_entity.get('SourceTemplate')
+        try:
+            service = TemplateService(quicksight, config.aws_account_id)
+            
+            # Convert source_entity dict to model if provided
+            source_entity_model = None
+            if request.source_entity:
+                source_entity_model = TemplateSourceEntity(
+                    source_analysis=request.source_entity.get('SourceAnalysis'),
+                    source_template=request.source_entity.get('SourceTemplate')
+                )
+            
+            template_request = TemplateCreateRequest(
+                template_id=request.template_id,
+                name=request.name,
+                source_entity=source_entity_model,
+                definition=None,
+                permissions=request.permissions,
+                version_description=request.version_description,
+                tags=request.tags
             )
-        
-        request = CreateTemplateRequest(
-            template_id=template_id,
-            name=name,
-            source_entity=source_entity_model,
-            definition=definition,
-            permissions=permissions,
-            version_description=version_description,
-            tags=tags
-        )
-        
-        return service.create_template(request)
+            
+            response = service.create_template(template_request)
+            
+            logger.info(f"Created template: {request.template_id}")
+            
+            return CreateTemplateResponse(
+                arn=response.get('Arn', ''),
+                template_id=response.get('TemplateId', request.template_id),
+                version_arn=response.get('VersionArn', ''),
+                creation_status=response.get('CreationStatus', 'CREATION_IN_PROGRESS'),
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating template {request.template_id}: {str(e)}")
+            return CreateTemplateResponse(
+                arn="",
+                template_id=request.template_id,
+                version_arn="",
+                creation_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="update_template",
         description="Update an existing QuickSight template"
     )
-    async def update_template(
-        template_id: str,
-        source_entity: Optional[Dict[str, Any]] = None,
-        definition: Optional[Dict[str, Any]] = None,
-        name: Optional[str] = None,
-        version_description: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def update_template(request: UpdateTemplateRequest) -> UpdateTemplateResponse:
         """
         Update an existing template (creates new version)
         
         Args:
-            template_id: ID of the template to update
-            source_entity: New source (analysis or template)
-            definition: Direct definition instead of source entity
-            name: Optional new name
-            version_description: Description for new version
+            request: UpdateTemplateRequest with updated configuration
             
         Returns:
-            Dict with update status and version number
+            UpdateTemplateResponse with update status and version number
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = TemplateService(quicksight, config.aws_account_id)
-        
-        # Convert source_entity dict to model if provided
-        source_entity_model = None
-        if source_entity:
-            source_entity_model = TemplateSourceEntity(
-                source_analysis=source_entity.get('SourceAnalysis'),
-                source_template=source_entity.get('SourceTemplate')
+        try:
+            service = TemplateService(quicksight, config.aws_account_id)
+            
+            # Convert source_entity dict to model if provided
+            source_entity_model = None
+            if request.source_entity:
+                source_entity_model = TemplateSourceEntity(
+                    source_analysis=request.source_entity.get('SourceAnalysis'),
+                    source_template=request.source_entity.get('SourceTemplate')
+                )
+            
+            template_request = TemplateUpdateRequest(
+                template_id=request.template_id,
+                source_entity=source_entity_model,
+                definition=None,
+                name=request.name,
+                version_description=request.version_description
             )
-        
-        request = UpdateTemplateRequest(
-            template_id=template_id,
-            source_entity=source_entity_model,
-            definition=definition,
-            name=name,
-            version_description=version_description
-        )
-        
-        return service.update_template(request)
+            
+            response = service.update_template(template_request)
+            
+            logger.info(f"Updated template: {request.template_id}")
+            
+            return UpdateTemplateResponse(
+                arn=response.get('Arn', ''),
+                template_id=response.get('TemplateId', request.template_id),
+                version_arn=response.get('VersionArn', ''),
+                update_status=response.get('UpdateStatus', 'UPDATE_IN_PROGRESS'),
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error updating template {request.template_id}: {str(e)}")
+            return UpdateTemplateResponse(
+                arn="",
+                template_id=request.template_id,
+                version_arn="",
+                update_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )

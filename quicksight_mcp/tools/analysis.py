@@ -1,8 +1,16 @@
 """Analysis management tools for creating and updating QuickSight analyses"""
 
 import logging
-from typing import Dict, Any, Optional, List
 from quicksight_mcp.services.analysis import AnalysisService
+from quicksight_mcp.models.tool_models import (
+    ListAnalysesRequest, ListAnalysesResponse,
+    DescribeAnalysisRequest, DescribeAnalysisResponse,
+    DescribeAnalysisDefinitionRequest, DescribeAnalysisDefinitionResponse,
+    CreateAnalysisRequest, CreateAnalysisResponse,
+    UpdateAnalysisRequest, UpdateAnalysisResponse,
+    UpdateAnalysisPermissionsRequest, UpdateAnalysisPermissionsResponse,
+    PaginationInfo, ErrorInfo
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,247 +20,238 @@ def register_analysis_tools(mcp):
     
     @mcp.tool(
         name="list_analyses",
-        description="List all analyses in the QuickSight account"
+        description="List analyses in the QuickSight account with pagination (limit 10)"
     )
-    async def list_analyses() -> Dict[str, str]:
-        """List all analyses with their IDs and names"""
+    async def list_analyses(request: ListAnalysesRequest) -> ListAnalysesResponse:
+        """
+        List analyses with pagination
+        
+        Args:
+            request: ListAnalysesRequest with offset for pagination
+            
+        Returns:
+            ListAnalysesResponse with analyses list and pagination info
+        """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = AnalysisService(quicksight, config.aws_account_id)
-        analyses = service.list_analyses()
-        
-        result = {}
-        for analysis in analyses:
-            analysis_id = analysis['AnalysisId']
-            analysis_name = analysis['Name']
-            result[analysis_id] = analysis_name
-        
-        return result
+        try:
+            service = AnalysisService(quicksight, config.aws_account_id)
+            all_analyses = service.list_analyses()
+            
+            # Apply pagination
+            limit = 10
+            start_idx = request.offset
+            end_idx = start_idx + limit
+            paginated_analyses = all_analyses[start_idx:end_idx]
+            
+            has_more = end_idx < len(all_analyses)
+            next_offset = end_idx if has_more else None
+            
+            pagination = PaginationInfo(
+                limit=limit,
+                offset=request.offset,
+                total=len(all_analyses),
+                has_more=has_more,
+                next_offset=next_offset
+            )
+            
+            return ListAnalysesResponse(
+                analyses=paginated_analyses,
+                pagination=pagination,
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error listing analyses: {str(e)}")
+            return ListAnalysesResponse(
+                analyses=[],
+                pagination=PaginationInfo(limit=10, offset=request.offset, total=0, has_more=False),
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_analysis",
         description="Get detailed information about a specific analysis"
     )
-    async def describe_analysis(analysis_id: str) -> Dict[str, Any]:
+    async def describe_analysis(request: DescribeAnalysisRequest) -> DescribeAnalysisResponse:
         """
-        Get analysis details including sheets, visuals, and filters
+        Get analysis details
         
         Args:
-            analysis_id: The ID of the analysis to describe
+            request: DescribeAnalysisRequest with analysis_id
+            
+        Returns:
+            DescribeAnalysisResponse with analysis details
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
-        service = AnalysisService(quicksight, config.aws_account_id)
-        return service.describe_analysis(analysis_id)
+        try:
+            service = AnalysisService(quicksight, config.aws_account_id)
+            analysis = service.describe_analysis(request.analysis_id)
+            
+            return DescribeAnalysisResponse(
+                analysis=analysis,
+                status="SUCCESS"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error describing analysis: {str(e)}")
+            return DescribeAnalysisResponse(
+                analysis={},
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_analysis_definition",
         description="Get the definition (structure) of an analysis"
     )
-    async def describe_analysis_definition(analysis_id: str) -> Dict[str, Any]:
+    async def describe_analysis_definition(request: DescribeAnalysisDefinitionRequest) -> DescribeAnalysisDefinitionResponse:
         """
-        Get analysis definition with full structure, sheets, and visuals
+        Get analysis definition with full structure
         
         Args:
-            analysis_id: The ID of the analysis
+            request: DescribeAnalysisDefinitionRequest with analysis_id
+            
+        Returns:
+            DescribeAnalysisDefinitionResponse with definition
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
         try:
             service = AnalysisService(quicksight, config.aws_account_id)
-            response = service.describe_analysis_definition(analysis_id=analysis_id)
+            response = service.describe_analysis_definition(analysis_id=request.analysis_id)
             
-            logger.info(f"Retrieved analysis definition for {analysis_id}")
+            logger.info(f"Retrieved analysis definition for {request.analysis_id}")
             
-            return {
-                'Status': response['Status'],
-                'AnalysisId': response.get('AnalysisId'),
-                'Definition': response.get('Definition'),
-                'Errors': response.get('Errors', []),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return DescribeAnalysisDefinitionResponse(
+                analysis_id=response.get('AnalysisId', request.analysis_id),
+                definition=response.get('Definition', {}),
+                errors=response.get('Errors', []),
+                status="SUCCESS"
+            )
             
         except Exception as e:
             logger.error(f"Error describing analysis definition: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e)
-            }
+            return DescribeAnalysisDefinitionResponse(
+                analysis_id=request.analysis_id,
+                definition={},
+                errors=[],
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="create_analysis",
         description="Create a new QuickSight analysis"
     )
-    async def create_analysis(
-        analysis_id: str,
-        name: str,
-        definition: Dict[str, Any],
-        permissions: Optional[List[Dict]] = None,
-        source_entity: Optional[Dict[str, Any]] = None,
-        theme_arn: Optional[str] = None,
-        tags: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    async def create_analysis(request: CreateAnalysisRequest) -> CreateAnalysisResponse:
         """
         Create a new analysis in QuickSight
         
         Args:
-            analysis_id: Unique identifier for the analysis
-            name: Display name for the analysis
-            definition: Analysis definition with sheets, visuals, filters, parameters
-            permissions: Optional list of permissions to grant
-            source_entity: Optional source (template or analysis) to copy from
-            theme_arn: Optional theme ARN to apply
-            tags: Optional tags for the analysis
+            request: CreateAnalysisRequest with all creation parameters
             
         Returns:
-            Dict with creation status and analysis ARN
+            CreateAnalysisResponse with creation status
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'AnalysisId': analysis_id,
-                'Name': name
-            }
-            
-            if definition:
-                params['Definition'] = definition
-            
-            if source_entity:
-                params['SourceEntity'] = source_entity
-            
-            if permissions:
-                params['Permissions'] = permissions
-            
-            if theme_arn:
-                params['ThemeArn'] = theme_arn
-            
-            if tags:
-                params['Tags'] = tags
-            
             service = AnalysisService(quicksight, config.aws_account_id)
             response = service.create_analysis(
-                analysis_id=analysis_id,
-                name=name,
-                definition=definition,
-                source_entity=source_entity,
-                permissions=permissions,
-                theme_arn=theme_arn,
-                tags=tags
+                analysis_id=request.analysis_id,
+                name=request.name,
+                definition=request.definition,
+                source_entity=request.source_entity,
+                permissions=request.permissions,
+                theme_arn=request.theme_arn,
+                tags=request.tags
             )
             
-            logger.info(f"Created analysis: {analysis_id}")
+            logger.info(f"Created analysis: {request.analysis_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response['Arn'],
-                'AnalysisId': response['AnalysisId'],
-                'CreationStatus': response.get('CreationStatus', 'CREATION_IN_PROGRESS'),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return CreateAnalysisResponse(
+                arn=response['Arn'],
+                analysis_id=response['AnalysisId'],
+                creation_status=response.get('CreationStatus', 'CREATION_IN_PROGRESS'),
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error creating analysis {analysis_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'AnalysisId': analysis_id
-            }
+            logger.error(f"Error creating analysis {request.analysis_id}: {str(e)}")
+            return CreateAnalysisResponse(
+                arn="",
+                analysis_id=request.analysis_id,
+                creation_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="update_analysis",
         description="Update an existing QuickSight analysis"
     )
-    async def update_analysis(
-        analysis_id: str,
-        name: str,
-        definition: Optional[Dict[str, Any]] = None,
-        source_entity: Optional[Dict[str, Any]] = None,
-        theme_arn: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def update_analysis(request: UpdateAnalysisRequest) -> UpdateAnalysisResponse:
         """
         Update an existing analysis
         
         Args:
-            analysis_id: ID of the analysis to update
-            name: New display name
-            definition: Updated analysis definition
-            source_entity: Updated source entity
-            theme_arn: Updated theme ARN
+            request: UpdateAnalysisRequest with all update parameters
             
         Returns:
-            Dict with update status
+            UpdateAnalysisResponse with update status
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
         try:
-            params = {
-                'AwsAccountId': config.aws_account_id,
-                'AnalysisId': analysis_id,
-                'Name': name
-            }
-            
-            if definition:
-                params['Definition'] = definition
-            
-            if source_entity:
-                params['SourceEntity'] = source_entity
-            
-            if theme_arn:
-                params['ThemeArn'] = theme_arn
-            
             service = AnalysisService(quicksight, config.aws_account_id)
             response = service.update_analysis(
-                analysis_id=analysis_id,
-                name=name,
-                definition=definition,
-                source_entity=source_entity,
-                theme_arn=theme_arn
+                analysis_id=request.analysis_id,
+                name=request.name,
+                definition=request.definition,
+                source_entity=request.source_entity,
+                theme_arn=request.theme_arn
             )
             
-            logger.info(f"Updated analysis: {analysis_id}")
+            logger.info(f"Updated analysis: {request.analysis_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response['Arn'],
-                'AnalysisId': response['AnalysisId'],
-                'UpdateStatus': response.get('UpdateStatus', 'UPDATE_IN_PROGRESS'),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return UpdateAnalysisResponse(
+                arn=response['Arn'],
+                analysis_id=response['AnalysisId'],
+                update_status=response.get('UpdateStatus', 'UPDATE_IN_PROGRESS'),
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error updating analysis {analysis_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'AnalysisId': analysis_id
-            }
+            logger.error(f"Error updating analysis {request.analysis_id}: {str(e)}")
+            return UpdateAnalysisResponse(
+                arn="",
+                analysis_id=request.analysis_id,
+                update_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="update_analysis_permissions",
         description="Update permissions for a QuickSight analysis"
     )
-    async def update_analysis_permissions(
-        analysis_id: str,
-        grant_permissions: Optional[List[Dict]] = None,
-        revoke_permissions: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    async def update_analysis_permissions(request: UpdateAnalysisPermissionsRequest) -> UpdateAnalysisPermissionsResponse:
         """
         Update permissions for an analysis
         
         Args:
-            analysis_id: ID of the analysis
-            grant_permissions: List of permissions to grant
-            revoke_permissions: List of permissions to revoke
+            request: UpdateAnalysisPermissionsRequest with permissions to grant/revoke
             
         Returns:
-            Dict with update status
+            UpdateAnalysisPermissionsResponse with update status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -260,24 +259,24 @@ def register_analysis_tools(mcp):
         try:
             service = AnalysisService(quicksight, config.aws_account_id)
             response = service.update_permissions(
-                analysis_id=analysis_id,
-                grant_permissions=grant_permissions,
-                revoke_permissions=revoke_permissions
+                analysis_id=request.analysis_id,
+                grant_permissions=request.grant_permissions,
+                revoke_permissions=request.revoke_permissions
             )
             
-            logger.info(f"Updated permissions for analysis: {analysis_id}")
+            logger.info(f"Updated permissions for analysis: {request.analysis_id}")
             
-            return {
-                'Status': response['Status'],
-                'AnalysisArn': response['AnalysisArn'],
-                'AnalysisId': response['AnalysisId'],
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return UpdateAnalysisPermissionsResponse(
+                analysis_arn=response['AnalysisArn'],
+                analysis_id=response['AnalysisId'],
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error updating analysis permissions {analysis_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'AnalysisId': analysis_id
-            }
+            logger.error(f"Error updating analysis permissions {request.analysis_id}: {str(e)}")
+            return UpdateAnalysisPermissionsResponse(
+                analysis_arn="",
+                analysis_id=request.analysis_id,
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )

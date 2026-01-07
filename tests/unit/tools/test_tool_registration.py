@@ -12,6 +12,11 @@ from quicksight_mcp.tools.template import register_template_tools
 from quicksight_mcp.tools.theme import register_theme_tools
 from quicksight_mcp.tools.search import register_search_tools
 from quicksight_mcp.tools.embed import register_embed_tools
+from quicksight_mcp.models.tool_models import (
+    ListAnalysesRequest, ListDashboardsRequest, ListDatasetsRequest,
+    ListDatasourcesRequest, ListTemplatesRequest, ListThemesRequest,
+    DescribeAnalysisRequest
+)
 
 
 @pytest.fixture
@@ -85,9 +90,15 @@ async def test_list_analyses_tool(mock_mcp):
     register_analysis_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_analyses']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListAnalysesRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'a1': 'Analysis 1', 'a2': 'Analysis 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.analyses) == 2
+    assert result.pagination.limit == 10
+    assert result.pagination.total == 2
 
 
 @pytest.mark.asyncio
@@ -103,9 +114,13 @@ async def test_describe_analysis_tool(mock_mcp):
     register_analysis_tools(mock_mcp)
     describe_func = mock_mcp.registered_tools['describe_analysis']
     
-    result = await describe_func('a1')
+    # Use new request/response pattern
+    request = DescribeAnalysisRequest(analysis_id='a1')
+    result = await describe_func(request)
     
-    assert result['AnalysisId'] == 'a1'
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert result.analysis['AnalysisId'] == 'a1'
 
 
 def test_register_dashboard_tools(mock_mcp):
@@ -131,9 +146,14 @@ async def test_list_dashboards_tool(mock_mcp):
     register_dashboard_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_dashboards']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListDashboardsRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'d1': 'Dashboard 1', 'd2': 'Dashboard 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.dashboards) == 2
+    assert result.pagination.limit == 10
 
 
 def test_register_dataset_tools(mock_mcp):
@@ -158,9 +178,14 @@ async def test_list_datasets_tool(mock_mcp):
     register_dataset_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_datasets']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListDatasetsRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'ds1': 'Dataset 1', 'ds2': 'Dataset 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.datasets) == 2
+    assert result.pagination.limit == 10
 
 
 def test_register_datasource_tools(mock_mcp):
@@ -183,9 +208,14 @@ async def test_list_datasources_tool(mock_mcp):
     register_datasource_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_datasources']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListDatasourcesRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'src1': 'Source 1', 'src2': 'Source 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.datasources) == 2
+    assert result.pagination.limit == 10
 
 
 def test_register_ingestion_tools(mock_mcp):
@@ -219,9 +249,14 @@ async def test_list_templates_tool(mock_mcp):
     register_template_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_templates']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListTemplatesRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'t1': 'Template 1', 't2': 'Template 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.templates) == 2
+    assert result.pagination.limit == 10
 
 
 def test_register_theme_tools(mock_mcp):
@@ -246,9 +281,14 @@ async def test_list_themes_tool(mock_mcp):
     register_theme_tools(mock_mcp)
     list_func = mock_mcp.registered_tools['list_themes']
     
-    result = await list_func()
+    # Use new request/response pattern
+    request = ListThemesRequest(offset=0)
+    result = await list_func(request)
     
-    assert result == {'th1': 'Theme 1', 'th2': 'Theme 2'}
+    # Check response structure
+    assert result.status == "SUCCESS"
+    assert len(result.themes) == 2
+    assert result.pagination.limit == 10
 
 
 def test_register_search_tools(mock_mcp):

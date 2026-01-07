@@ -3,6 +3,15 @@
 import logging
 from typing import Dict, Any
 from quicksight_mcp.services.ingestion import IngestionService
+from quicksight_mcp.models.tool_models import (
+    CreateIngestionRequest, CreateIngestionResponse,
+    DescribeIngestionRequest, DescribeIngestionResponse,
+    CancelIngestionRequest, CancelIngestionResponse,
+    ListRefreshSchedulesRequest, ListRefreshSchedulesResponse,
+    CreateRefreshScheduleRequest, CreateRefreshScheduleResponse,
+    UpdateRefreshScheduleRequest, UpdateRefreshScheduleResponse,
+    ErrorInfo
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,21 +23,15 @@ def register_ingestion_tools(mcp):
         name="create_ingestion",
         description="Create a data ingestion job for a SPICE dataset"
     )
-    async def create_ingestion(
-        dataset_id: str,
-        ingestion_id: str,
-        ingestion_type: str = "FULL_REFRESH"
-    ) -> Dict[str, Any]:
+    async def create_ingestion(request: CreateIngestionRequest) -> CreateIngestionResponse:
         """
         Create a data ingestion job to load data into SPICE
         
         Args:
-            dataset_id: ID of the dataset to ingest
-            ingestion_id: Unique identifier for this ingestion job
-            ingestion_type: Type of ingestion (FULL_REFRESH or INCREMENTAL_REFRESH)
+            request: CreateIngestionRequest with ingestion configuration
             
         Returns:
-            Dict with ingestion status and ARN
+            CreateIngestionResponse with ingestion status and ARN
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -36,47 +39,43 @@ def register_ingestion_tools(mcp):
         try:
             service = IngestionService(quicksight, config.aws_account_id)
             response = service.create_ingestion(
-                dataset_id=dataset_id,
-                ingestion_id=ingestion_id,
-                ingestion_type=ingestion_type
+                dataset_id=request.dataset_id,
+                ingestion_id=request.ingestion_id,
+                ingestion_type=request.ingestion_type
             )
             
-            logger.info(f"Created ingestion {ingestion_id} for dataset {dataset_id}")
+            logger.info(f"Created ingestion {request.ingestion_id} for dataset {request.dataset_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response['Arn'],
-                'IngestionId': response.get('IngestionId'),
-                'IngestionStatus': response.get('IngestionStatus', 'INITIALIZED'),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return CreateIngestionResponse(
+                arn=response['Arn'],
+                ingestion_id=response.get('IngestionId', request.ingestion_id),
+                ingestion_status=response.get('IngestionStatus', 'INITIALIZED'),
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error creating ingestion {ingestion_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id,
-                'IngestionId': ingestion_id
-            }
+            logger.error(f"Error creating ingestion {request.ingestion_id}: {str(e)}")
+            return CreateIngestionResponse(
+                arn="",
+                ingestion_id=request.ingestion_id,
+                ingestion_status="FAILED",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="describe_ingestion",
         description="Get details about a data ingestion job"
     )
-    async def describe_ingestion(
-        dataset_id: str,
-        ingestion_id: str
-    ) -> Dict[str, Any]:
+    async def describe_ingestion(request: DescribeIngestionRequest) -> DescribeIngestionResponse:
         """
         Get status and details of an ingestion job
         
         Args:
-            dataset_id: ID of the dataset
-            ingestion_id: ID of the ingestion job
+            request: DescribeIngestionRequest with dataset_id and ingestion_id
             
         Returns:
-            Dict with ingestion details and status
+            DescribeIngestionResponse with ingestion details and status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -84,52 +83,54 @@ def register_ingestion_tools(mcp):
         try:
             service = IngestionService(quicksight, config.aws_account_id)
             response = service.describe_ingestion(
-                dataset_id=dataset_id,
-                ingestion_id=ingestion_id
+                dataset_id=request.dataset_id,
+                ingestion_id=request.ingestion_id
             )
             
             ingestion = response.get('Ingestion', {})
             
-            return {
-                'Status': response['Status'],
-                'Arn': ingestion.get('Arn'),
-                'IngestionId': ingestion.get('IngestionId'),
-                'IngestionStatus': ingestion.get('IngestionStatus'),
-                'IngestionType': ingestion.get('IngestionType'),
-                'CreatedTime': str(ingestion.get('CreatedTime', '')),
-                'IngestionTimeInSeconds': ingestion.get('IngestionTimeInSeconds'),
-                'IngestionSizeInBytes': ingestion.get('IngestionSizeInBytes'),
-                'RowInfo': ingestion.get('RowInfo', {}),
-                'ErrorInfo': ingestion.get('ErrorInfo', {}),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return DescribeIngestionResponse(
+                arn=ingestion.get('Arn', ''),
+                ingestion_id=ingestion.get('IngestionId', request.ingestion_id),
+                ingestion_status=ingestion.get('IngestionStatus', 'UNKNOWN'),
+                ingestion_type=ingestion.get('IngestionType', ''),
+                created_time=str(ingestion.get('CreatedTime', '')),
+                ingestion_time_in_seconds=ingestion.get('IngestionTimeInSeconds'),
+                ingestion_size_in_bytes=ingestion.get('IngestionSizeInBytes'),
+                row_info=ingestion.get('RowInfo', {}),
+                error_info=ingestion.get('ErrorInfo', {}),
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error describing ingestion {ingestion_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id,
-                'IngestionId': ingestion_id
-            }
+            logger.error(f"Error describing ingestion {request.ingestion_id}: {str(e)}")
+            return DescribeIngestionResponse(
+                arn="",
+                ingestion_id=request.ingestion_id,
+                ingestion_status="FAILED",
+                ingestion_type="",
+                created_time="",
+                ingestion_time_in_seconds=None,
+                ingestion_size_in_bytes=None,
+                row_info={},
+                error_info={},
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="cancel_ingestion",
         description="Cancel a running data ingestion job"
     )
-    async def cancel_ingestion(
-        dataset_id: str,
-        ingestion_id: str
-    ) -> Dict[str, Any]:
+    async def cancel_ingestion(request: CancelIngestionRequest) -> CancelIngestionResponse:
         """
         Cancel a running ingestion job
         
         Args:
-            dataset_id: ID of the dataset
-            ingestion_id: ID of the ingestion job to cancel
+            request: CancelIngestionRequest with dataset_id and ingestion_id
             
         Returns:
-            Dict with cancellation status
+            CancelIngestionResponse with cancellation status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -137,95 +138,87 @@ def register_ingestion_tools(mcp):
         try:
             service = IngestionService(quicksight, config.aws_account_id)
             response = service.cancel_ingestion(
-                dataset_id=dataset_id,
-                ingestion_id=ingestion_id
+                dataset_id=request.dataset_id,
+                ingestion_id=request.ingestion_id
             )
             
-            logger.info(f"Cancelled ingestion {ingestion_id}")
+            logger.info(f"Cancelled ingestion {request.ingestion_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response.get('Arn'),
-                'IngestionId': response.get('IngestionId'),
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return CancelIngestionResponse(
+                arn=response.get('Arn', ''),
+                ingestion_id=response.get('IngestionId', request.ingestion_id),
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error cancelling ingestion {ingestion_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id,
-                'IngestionId': ingestion_id
-            }
+            logger.error(f"Error cancelling ingestion {request.ingestion_id}: {str(e)}")
+            return CancelIngestionResponse(
+                arn="",
+                ingestion_id=request.ingestion_id,
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="list_refresh_schedules",
         description="List all refresh schedules for a dataset"
     )
-    async def list_refresh_schedules(
-        dataset_id: str
-    ) -> Dict[str, Any]:
+    async def list_refresh_schedules(request: ListRefreshSchedulesRequest) -> ListRefreshSchedulesResponse:
         """
         List all refresh schedules configured for a dataset
         
         Args:
-            dataset_id: ID of the dataset
+            request: ListRefreshSchedulesRequest with dataset_id
             
         Returns:
-            Dict with list of refresh schedules
+            ListRefreshSchedulesResponse with list of refresh schedules
         """
         config = mcp.config
         quicksight = mcp.quicksight
         
         try:
             service = IngestionService(quicksight, config.aws_account_id)
-            schedules = service.list_refresh_schedules(dataset_id=dataset_id)
+            schedules = service.list_refresh_schedules(dataset_id=request.dataset_id)
             
-            return {
-                'Status': 200,
-                'DataSetId': dataset_id,
-                'RefreshSchedules': [
-                    {
-                        'ScheduleId': s.get('ScheduleId'),
-                        'ScheduleFrequency': s.get('ScheduleFrequency', {}),
-                        'StartAfterDateTime': str(s.get('StartAfterDateTime', '')),
-                        'RefreshType': s.get('RefreshType'),
-                        'Arn': s.get('Arn')
-                    }
-                    for s in schedules
-                ]
-            }
+            formatted_schedules = [
+                {
+                    'ScheduleId': s.get('ScheduleId'),
+                    'ScheduleFrequency': s.get('ScheduleFrequency', {}),
+                    'StartAfterDateTime': str(s.get('StartAfterDateTime', '')),
+                    'RefreshType': s.get('RefreshType'),
+                    'Arn': s.get('Arn')
+                }
+                for s in schedules
+            ]
+            
+            return ListRefreshSchedulesResponse(
+                dataset_id=request.dataset_id,
+                refresh_schedules=formatted_schedules,
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error listing refresh schedules for {dataset_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id
-            }
+            logger.error(f"Error listing refresh schedules for {request.dataset_id}: {str(e)}")
+            return ListRefreshSchedulesResponse(
+                dataset_id=request.dataset_id,
+                refresh_schedules=[],
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="create_refresh_schedule",
         description="Create a new refresh schedule for a dataset"
     )
-    async def create_refresh_schedule(
-        dataset_id: str,
-        schedule_id: str,
-        schedule_frequency: Dict[str, Any],
-        refresh_type: str = "FULL_REFRESH"
-    ) -> Dict[str, Any]:
+    async def create_refresh_schedule(request: CreateRefreshScheduleRequest) -> CreateRefreshScheduleResponse:
         """
         Create a refresh schedule for automatic data updates
         
         Args:
-            dataset_id: ID of the dataset
-            schedule_id: Unique identifier for the schedule
-            schedule_frequency: Schedule frequency configuration (interval, timezone, etc)
-            refresh_type: Type of refresh (FULL_REFRESH or INCREMENTAL_REFRESH)
+            request: CreateRefreshScheduleRequest with schedule configuration
             
         Returns:
-            Dict with creation status
+            CreateRefreshScheduleResponse with creation status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -233,51 +226,42 @@ def register_ingestion_tools(mcp):
         try:
             service = IngestionService(quicksight, config.aws_account_id)
             response = service.create_refresh_schedule(
-                dataset_id=dataset_id,
-                schedule_id=schedule_id,
-                schedule_frequency=schedule_frequency,
-                refresh_type=refresh_type
+                dataset_id=request.dataset_id,
+                schedule_id=request.schedule_id,
+                schedule_frequency=request.schedule_frequency,
+                refresh_type=request.refresh_type
             )
             
-            logger.info(f"Created refresh schedule {schedule_id} for dataset {dataset_id}")
+            logger.info(f"Created refresh schedule {request.schedule_id} for dataset {request.dataset_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response.get('Arn'),
-                'ScheduleId': schedule_id,
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return CreateRefreshScheduleResponse(
+                arn=response.get('Arn', ''),
+                schedule_id=request.schedule_id,
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error creating refresh schedule {schedule_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id,
-                'ScheduleId': schedule_id
-            }
+            logger.error(f"Error creating refresh schedule {request.schedule_id}: {str(e)}")
+            return CreateRefreshScheduleResponse(
+                arn="",
+                schedule_id=request.schedule_id,
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="update_refresh_schedule",
         description="Update an existing refresh schedule"
     )
-    async def update_refresh_schedule(
-        dataset_id: str,
-        schedule_id: str,
-        schedule_frequency: Dict[str, Any],
-        refresh_type: str = "FULL_REFRESH"
-    ) -> Dict[str, Any]:
+    async def update_refresh_schedule(request: UpdateRefreshScheduleRequest) -> UpdateRefreshScheduleResponse:
         """
         Update an existing refresh schedule
         
         Args:
-            dataset_id: ID of the dataset
-            schedule_id: ID of the schedule to update
-            schedule_frequency: Updated schedule frequency configuration
-            refresh_type: Updated refresh type
+            request: UpdateRefreshScheduleRequest with updated schedule configuration
             
         Returns:
-            Dict with update status
+            UpdateRefreshScheduleResponse with update status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -285,26 +269,25 @@ def register_ingestion_tools(mcp):
         try:
             service = IngestionService(quicksight, config.aws_account_id)
             response = service.update_refresh_schedule(
-                dataset_id=dataset_id,
-                schedule_id=schedule_id,
-                schedule_frequency=schedule_frequency,
-                refresh_type=refresh_type
+                dataset_id=request.dataset_id,
+                schedule_id=request.schedule_id,
+                schedule_frequency=request.schedule_frequency,
+                refresh_type=request.refresh_type
             )
             
-            logger.info(f"Updated refresh schedule {schedule_id}")
+            logger.info(f"Updated refresh schedule {request.schedule_id}")
             
-            return {
-                'Status': response['Status'],
-                'Arn': response.get('Arn'),
-                'ScheduleId': schedule_id,
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return UpdateRefreshScheduleResponse(
+                arn=response.get('Arn', ''),
+                schedule_id=request.schedule_id,
+                status="SUCCESS"
+            )
             
         except Exception as e:
-            logger.error(f"Error updating refresh schedule {schedule_id}: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e),
-                'DataSetId': dataset_id,
-                'ScheduleId': schedule_id
-            }
+            logger.error(f"Error updating refresh schedule {request.schedule_id}: {str(e)}")
+            return UpdateRefreshScheduleResponse(
+                arn="",
+                schedule_id=request.schedule_id,
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )

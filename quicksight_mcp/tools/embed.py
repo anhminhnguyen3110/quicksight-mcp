@@ -3,6 +3,11 @@
 import logging
 from typing import Dict, Any, Optional, List
 from quicksight_mcp.services.embed import EmbedService
+from quicksight_mcp.models.tool_models import (
+    GenerateEmbedUrlForAnonymousUserRequest, GenerateEmbedUrlForAnonymousUserResponse,
+    GenerateEmbedUrlForRegisteredUserRequest, GenerateEmbedUrlForRegisteredUserResponse,
+    ErrorInfo
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,27 +19,15 @@ def register_embed_tools(mcp):
         name="generate_embed_url_for_anonymous_user",
         description="Generate embed URL for anonymous users (public dashboards)"
     )
-    async def generate_embed_url_for_anonymous_user(
-        namespace: str,
-        authorized_resource_arns: List[str],
-        experience_configuration: Dict[str, Any],
-        session_lifetime_in_minutes: Optional[int] = 600,
-        allowed_domains: Optional[List[str]] = None,
-        session_tags: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    async def generate_embed_url_for_anonymous_user(request: GenerateEmbedUrlForAnonymousUserRequest) -> GenerateEmbedUrlForAnonymousUserResponse:
         """
         Generate embed URL for anonymous users without QuickSight subscription
         
         Args:
-            namespace: QuickSight namespace (usually 'default')
-            authorized_resource_arns: List of dashboard/analysis ARNs to embed
-            experience_configuration: Dashboard or Q&A experience config
-            session_lifetime_in_minutes: Session duration (max 600 = 10 hours)
-            allowed_domains: Domains allowed to embed (for CORS)
-            session_tags: Optional session tags for RLS
+            request: GenerateEmbedUrlForAnonymousUserRequest with configuration
             
         Returns:
-            Dict with EmbedUrl and Status
+            GenerateEmbedUrlForAnonymousUserResponse with EmbedUrl and Status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -42,50 +35,42 @@ def register_embed_tools(mcp):
         try:
             service = EmbedService(quicksight, config.aws_account_id)
             response = service.generate_embed_url_for_anonymous_user(
-                namespace=namespace,
-                authorized_resource_arns=authorized_resource_arns,
-                experience_configuration=experience_configuration,
-                session_lifetime_in_minutes=session_lifetime_in_minutes,
-                allowed_domains=allowed_domains,
-                session_tags=session_tags
+                namespace=request.namespace,
+                authorized_resource_arns=request.authorized_resource_arns,
+                experience_configuration=request.experience_configuration,
+                session_lifetime_in_minutes=request.session_lifetime_in_minutes,
+                allowed_domains=request.allowed_domains,
+                session_tags=request.session_tags
             )
             
             logger.info("Generated anonymous embed URL")
             
-            return {
-                'Status': response['Status'],
-                'EmbedUrl': response['EmbedUrl'],
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return GenerateEmbedUrlForAnonymousUserResponse(
+                embed_url=response['EmbedUrl'],
+                status="SUCCESS"
+            )
             
         except Exception as e:
             logger.error(f"Error generating anonymous embed URL: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e)
-            }
+            return GenerateEmbedUrlForAnonymousUserResponse(
+                embed_url="",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="generate_embed_url_for_registered_user",
         description="Generate embed URL for registered QuickSight users"
     )
-    async def generate_embed_url_for_registered_user(
-        user_arn: str,
-        experience_configuration: Dict[str, Any],
-        session_lifetime_in_minutes: Optional[int] = 600,
-        allowed_domains: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    async def generate_embed_url_for_registered_user(request: GenerateEmbedUrlForRegisteredUserRequest) -> GenerateEmbedUrlForRegisteredUserResponse:
         """
         Generate embed URL for registered QuickSight users
         
         Args:
-            user_arn: ARN of the QuickSight user
-            experience_configuration: Dashboard, console, or Q&A experience
-            session_lifetime_in_minutes: Session duration (max 600 = 10 hours)
-            allowed_domains: Domains allowed to embed (for CORS)
+            request: GenerateEmbedUrlForRegisteredUserRequest with configuration
             
         Returns:
-            Dict with EmbedUrl and Status
+            GenerateEmbedUrlForRegisteredUserResponse with EmbedUrl and Status
         """
         config = mcp.config
         quicksight = mcp.quicksight
@@ -93,26 +78,26 @@ def register_embed_tools(mcp):
         try:
             service = EmbedService(quicksight, config.aws_account_id)
             response = service.generate_embed_url_for_registered_user(
-                user_arn=user_arn,
-                experience_configuration=experience_configuration,
-                session_lifetime_in_minutes=session_lifetime_in_minutes,
-                allowed_domains=allowed_domains
+                user_arn=request.user_arn,
+                experience_configuration=request.experience_configuration,
+                session_lifetime_in_minutes=request.session_lifetime_in_minutes,
+                allowed_domains=request.allowed_domains
             )
             
             logger.info("Generated registered user embed URL")
             
-            return {
-                'Status': response['Status'],
-                'EmbedUrl': response['EmbedUrl'],
-                'RequestId': response['ResponseMetadata']['RequestId']
-            }
+            return GenerateEmbedUrlForRegisteredUserResponse(
+                embed_url=response['EmbedUrl'],
+                status="SUCCESS"
+            )
             
         except Exception as e:
             logger.error(f"Error generating registered embed URL: {str(e)}")
-            return {
-                'Status': 'FAILED',
-                'Error': str(e)
-            }
+            return GenerateEmbedUrlForRegisteredUserResponse(
+                embed_url="",
+                status="FAILED",
+                error=ErrorInfo(message=str(e))
+            )
     
     @mcp.tool(
         name="get_dashboard_embed_url",
